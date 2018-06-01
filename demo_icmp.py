@@ -59,9 +59,9 @@ for i in range(args.queries):
         t_f = time()
 
         if ans is not None:
-            rtt = (t_f - t_i)*1000
+            #rtt = (t_f - t_i)*1000
             # Otra manera: el paquete enviado tiene su timestamp en sent_time, y el recibido en time. 
-            #rtt = (ans.time - probe.sent_time)*1000
+            rtt = (ans.time - probe.sent_time)*1000
 
             if ttl not in responses: responses[ttl] = []
             responses[ttl].append((ans.src, rtt))

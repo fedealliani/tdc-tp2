@@ -157,18 +157,11 @@ print("")
 actualTTL = 1
 
 while actualTTL < maximoTTL:
-	# Creamos el paquete a enviar con el TTL actual
-	probe = IP(dst=hostDestino, ttl=actualTTL) / ICMP()
-
-	# Nos guardamos nuestra IP local para usarla mas adelante
-	ipLocal = probe.src
-
 	# Imprimimos el TTL actual
 	if args.verbose:
-		print ("TTL: %d" %(actualTTL)).rjust(2)
+		print (("TTL: %d" %(actualTTL)).rjust(2))
 	else:
-		print ("%d" %(actualTTL)).rjust(2) ,
-		sys.stdout.flush()
+		print (("%d" %(actualTTL)).rjust(2), end=' ')
 
 	# Reseteamos las variables para este TTL
 	ultimaIP = "*"
@@ -189,41 +182,47 @@ while actualTTL < maximoTTL:
 	while cantidadTimeExceeded < minimoTimeExceededRequeridos:
 		next_ttl = False
 
-		t_i = []
-		t_f = []
+		#t_i = []
+		#t_f = []
 		respuestas = []
+		probe = []
 
 		# Mandamos queries simultaneas
 		if args.verbose:
-			print "| Enviando %d queries con TTL=%d a %s..." %(args.queries, actualTTL, hostDestino)
+			print ("| Enviando %d queries con TTL=%d a %s..." %(args.queries, actualTTL, hostDestino))
 
 		for x in range(0, args.queries):
-			t_i.append(time())
+			# Creamos el paquete a enviar con el TTL actual
+			probe.append(IP(dst=hostDestino, ttl=actualTTL) / ICMP())
+			#t_i.append(time())
 			# Envia un paquete, y devuelve la respuesta (si la hubo)
-			respuestas.append(sr1(probe, verbose=False, timeout=args.timeout))
-			t_f.append(time())
+			respuestas.append(sr1(probe[x], verbose=False, timeout=args.timeout))
+			#t_f.append(time())
+
+		# Nos guardamos nuestra IP local para usarla mas adelante
+		ipLocal = probe[0].src
 
 		if args.verbose:
-			print "| %d queries enviadas. Recibidas %d respuestas." %(args.queries, sum(x is not None for x in respuestas))
+			print ("| %d queries enviadas. Recibidas %d respuestas." %(args.queries, sum(x is not None for x in respuestas)))
 
 		# Ejemplo practico con queries=15 y respuestasTimeExceededDeseadas=30
 		# Salen las dos rafagas iniciales de 15 paquetes cada una.
 		# Entre las dos rafagas, hay 29 respuestas del tipo Time Exceeded, y un timeout
 		# Como cantidadTimeExceeded = 29 < minimoTimeExceededRequeridos = 30, vamos a enviar otra rafaga mas de 15 paquetes.
 		# De esta nueva rafaga se obtienen 30 respuestas del tipo Time Exceeded.
-		# Con lo cual vamos a obtener informacion equivalente a 39+30 = 59 mediciones
+		# Con lo cual vamos a obtener informacion equivalente a 29+30 = 59 mediciones
 
-		# Pruebas de mediciones.
-		# Resulta que la mejor al final es usar la funcion time() de python		
-		#print(" t_i = %f" %(t_i))
-		#print(" t_f = %f" %(t_f))
-		#print(" t_f - t_i = %f ms" %((t_f - t_i)*1000))
-		#print(" ans.time = %f" %(ans.time))
-		#print(" probe.sent_time = %f" %(probe.sent_time))
-		#print(" ans.time - probe.sent_time = %f ms" %((ans.time - probe.sent_time)*1000))
 		for x in range(0, len(respuestas)):
 			ans = respuestas[x]
 			if ans is not None:
+				# Pruebas de mediciones.
+				#print(" t_i = %f" %(t_i[x]))
+				#print(" t_f = %f" %(t_f[x]))
+				#print(" t_f - t_i = %f ms" %((t_f[x] - t_i[x])*1000))
+				#print(" ans.time = %f" %(ans.time))
+				#print(" probe[x].sent_time = %f" %(probe[x].sent_time))
+				#print(" ans.time - probe[x].sent_time = %f ms" %((ans.time - probe[x].sent_time)*1000))
+				
 				# Volvemos a setear minimoTimeExceededRequeridos a su valor inicial
 				# Nota: leer los comentarios del else (timeout) para entender por que se hace esto
 				minimoTimeExceededRequeridos = respuestasTimeExceededDeseadas
@@ -234,21 +233,20 @@ while actualTTL < maximoTTL:
 				# Imprimimos la IP si es que obtuvimos una nueva
 				if not args.verbose:
 					if (ans.src != ultimaIP):
-						print "(%s)" %(ans.src),
-						sys.stdout.flush()
+						print ("(%s)" %(ans.src), end=' ')
+						
 
 				ultimaIP = ans.src
-				ultimoRTT = (t_f[x] - t_i[x]) * 1000 # (ans.time - probe.sent_time)*1000
+				ultimoRTT = (ans.time - probe[x].sent_time) * 1000 # (ans.time - probe.sent_time)*1000
 
 				# Imprimimos el RTT
 				if args.verbose:
-					print "|",
-					print ("%d" %(x+1)).rjust(2),
-					print "(OK):",
-					print "Respuesta de %s (%s) en %.2f ms" %(ans.src, "time-exceeded" if ans.type == 11 else ans.type, ultimoRTT)
+					print ("|", end=' ')
+					print (("%d" %(x+1)).rjust(2), end=' ')
+					print ("(OK):", end=' ')
+					print ("Respuesta de %s (%s) en %.2f ms" %(ans.src, "time-exceeded" if ans.type == 11 else ("echo-reply" if ans.type == 0 else ans.type), ultimoRTT))
 				else:
-					print " %.2f ms" %(ultimoRTT),
-					sys.stdout.flush()
+					print (" %.2f ms" %(ultimoRTT), end=' ')
 
 				# Guardamos los datos en nuestro diccionario para la clave actualTTL
 				respuestasRTT[actualTTL].append((ultimaIP, ultimoRTT))
@@ -278,12 +276,11 @@ while actualTTL < maximoTTL:
 				# con un Time Exceeded el 100% de las veces. En ese caso,
 				# cuanto tiempo tenemos que esperar para proseguir con el proximo TTL?
 				if args.verbose:
-					print "|",
-					print ("%d" %(x+1)).rjust(2),
-					print "(ERROR): *"
+					print ("|", end=' ')
+					print (("%d" %(x+1)).rjust(2), end=' ')
+					print ("(ERROR): *")
 				else:
-					print "*",
-					sys.stdout.flush()
+					print ("*", end=' ')
 
 				# Vamos a hacer un truquillo, que consiste en decrementar en 1, temporalmente,
 				# la variable minimoTimeExceededRequeridos (variable que indica la cantidad minima de Time Exceeded a esperar)
@@ -293,6 +290,9 @@ while actualTTL < maximoTTL:
 
 				# Si por algun milagro divino recibimos alguna respuesta Time Exceeded mas adelante, volvemos a setear minimoTimeExceededRequeridos en 30,
 				# porque significa que, esperando el suficiente tiempo, vamos a poder llegar a los 30 Time Exceeded iniciales que queriamos (o los que fueran por parametro)
+
+				print("cantidadTimeExceeded = %d" %(cantidadTimeExceeded))				
+				print("minimoTimeExceededRequeridos = %d" %(minimoTimeExceededRequeridos))				
 
 				minimoTimeExceededRequeridos -= 1
 
@@ -311,11 +311,11 @@ while actualTTL < maximoTTL:
 	# Llegamos a las 30 (o mas) respuestas Time Exceeded para este TTL (o a una cantidad considerable de timeouts)
 	# Flusheamos el buffer de print
 	if args.verbose:
-		print "|"
-		print "| Cantidad total de time-exceeded recibidos: %d/%d" %(cantidadTimeExceeded, respuestasTimeExceededDeseadas)
-		print "|_____"
-	print ""
-	print ""
+		print ("|")
+		print ("| Cantidad total de time-exceeded recibidos: %d/%d" %(cantidadTimeExceeded, respuestasTimeExceededDeseadas))
+		print ("|_____")
+	print ("")
+	print ("")
 
 	# Pasamos al siguiente TTL
 	actualTTL += 1
@@ -326,6 +326,12 @@ while actualTTL < maximoTTL:
 		break;
 
 # Si llegamos aca es porque ya llegamos al host destino y el mismo nos respondio unas 30 veces	
+if distanciasAlHost:	
+	print("Se ha llegado al host %s en %d hops" %(args.host, actualTTL))
+else:
+	print("No se ha podido llegar al host %s en %d hops" %(args.host, actualTTL))
+
+print("")
 
 # Calculamos distancias promedio
 # Para ello, tomamos los valores de distancias acumulados (campo RTT de la tupla) y los dividimos por la cantidad (campo cantidad de la tupla)
@@ -333,8 +339,9 @@ for x in range(0, len(distancias)):
 	# Nota: la unica forma de modificar una tupla es creando una tupla nueva usando los valores anteriores
 	distancias[x] = (distancias[x][0], distancias[x][1], distancias[x][2]/distancias[x][3], distancias[x][3])
 
-# Calculamos la distancia al host promedio
-distanciaAlHostPromedio = average(distanciasAlHost)
+# Calculamos la distancia al host promedio (si es que llegamos)
+if distanciasAlHost:
+	distanciaAlHostPromedio = average(distanciasAlHost)
 
 # Calculamos los outliers y los guardamos en una variable global
 findOutliers()
@@ -349,34 +356,37 @@ for x in range(0, len(distancias)):
 desvioEstandar = math.sqrt((sumatoria/(len(distancias)-1)))
 
 # Imprimimos la tabla con toda la info
-print "|",
-print ("IP1").center(15),
-print "|",
-print ("IP2").center(15),
-print "|",
-print ("RTT (ms)").center(8),
-print "|",
-print ("Mediciones").center(10),
-print "|",
-print ("(x_i-media(X))/S").center(16),
-print "|",
-print ("Es Outlier?").center(10),
-print "|"
-
-print "+-----------------+-----------------+----------+------------+------------------+-------------+"
+print ("+-----------------+-----------------+----------+------------+------------------+-------------+")
+print ("|", end=' ')
+print (("IP1").center(15), end=' ')
+print ("|", end=' ')
+print (("IP2").center(15), end=' ')
+print ("|", end=' ')
+print (("RTT (ms)").center(8), end=' ')
+print ("|", end=' ')
+print (("Mediciones").center(10), end=' ')
+print ("|", end=' ')
+print (("(x_i-media(X))/S").center(16), end=' ')
+print ("|", end=' ')
+print (("Es Outlier?").center(10), end=' ')
+print ("|")
+print ("+-----------------+-----------------+----------+------------+------------------+-------------+")
 
 for x in range(0, len(distancias)):
-	print "|",
-	print (distancias[x][0]).ljust(15),
-	print "|",
-	print (distancias[x][1]).ljust(15),
-	print "|",
-	print ("%.2f" %(distancias[x][2])).rjust(8),
-	print "|",
-	print ("%d" %(distancias[x][3])).rjust(10),
-	print "|",
-	print ("%.2f" %((distancias[x][2] - media)/desvioEstandar)).rjust(16),
-	print "|",
-	print ("X" if esOutlier(x) else "").center(11),
-	print "|"
+	print ("|", end=' ')
+	print ((distancias[x][0]).ljust(15), end=' ')
+	print ("|", end=' ')
+	print ((distancias[x][1]).ljust(15), end=' ')
+	print ("|", end=' ')
+	print (("%.2f" %(distancias[x][2])).rjust(8), end=' ')
+	print ("|", end=' ')
+	print (("%d" %(distancias[x][3])).rjust(10), end=' ')
+	print ("|", end=' ')
+	print (("%.2f" %((distancias[x][2] - media)/desvioEstandar)).rjust(16), end=' ')
+	print ("|", end=' ')
+	print (("X" if esOutlier(x) else "").center(11), end=' ')
+	print ("|")
 
+print ("+-----------------+-----------------+----------+------------+------------------+-------------+")
+
+print("")
