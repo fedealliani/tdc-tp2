@@ -40,6 +40,9 @@ respuestasRTT = {} # Se inicializa como un diccionario vacio
 # La sacamos del paquete creado por scapy
 ipLocal = "*" # Por ahora es un dummy
 
+# Variable que guarda todos los outliers
+outliers = []
+
 # Agrega la distancia entre ip1 e ip2 a la lista distancias
 def guardarDistancia(ip1, ip2, distancia):
 	# Si alguna de las dos IP es basura, no agregamos nada
@@ -68,62 +71,61 @@ def guardarDistancia(ip1, ip2, distancia):
 	distancias.append((ip1, ip2, distancia, 1))
 
 def calcularTau(vector):
-	tStudent=abs(stats.t.ppf(0.05/2,len(vector)-2))
-	tau= tStudent*(len(vector)-1)/(math.sqrt(len(vector))*math.sqrt(len(vector)-2+tStudent**2))
+	tStudent = abs(stats.t.ppf(0.05/2,len(vector)-2))
+	tau = tStudent*(len(vector)-1)/(math.sqrt(len(vector))*math.sqrt(len(vector)-2+tStudent**2))
 	return tau
-
 
 def dameElPromedio(ipOrigen,ipDestino):
 	for x in range(0,len(distancias)):
 		if (distancias[x][0]==ipOrigen and distancias[x][1]==ipDestino) or (distancias[x][0]==ipDestino and distancias[x][1]==ipOrigen):
 			return distancias[x][2]
 
-def findOutliers(indice):
-	outliers=[]
-	ruta=respuestasRTT[indice]
-	vector=[] #Vector es un arreglo de tuplas (ipOrigen,ipdestino,promedio RTT entre las ip de la rutas,desvio estandar)
+def esOutlier(x):
+	for i in range(0, len(outliers)):
+		if (distancias[x][0] == outliers[i][0] and distancias[x][1] == outliers[i][1]) or (distancias[x][0] == outliers[i][1] and distancias[x][1] == outliers[i][0]):
+			# Encontramos esta entrada en la lista de outliers, entonces es un outlier
+			return True
+	return False
 
-	for x in range(1,len(ruta)+1):
-		if x==1:			
-			if ruta[x][0]!="*":
-				vector.append((ipLocal,ruta[x][0],dameElPromedio(ipLocal,ruta[x][0]),0))
-		else:
-			if ruta[x][0]!="*" and ruta[x-1][0]!="*":
-				vector.append((ruta[x-1][0],ruta[x][0],dameElPromedio(ruta[x-1][0],ruta[x][0]),0))
-	
-	hayMasOutliers=True
-	print("Vector:")
-	print(vector)
+def findOutliers():	
+	# Vector es Tupla<ip1, ip2, RTT promedio, desvio estandar>
+	vector = []
+
+	# Copiamos los datos del vector distancias a vector
+	for x in range(0, len(distancias)):
+		vector.append((distancias[x][0], distancias[x][1], distancias[x][2], 0))
+
+	hayMasOutliers = True
 	while hayMasOutliers:
-		promedio=reduce(lambda x, y: x + y, [x[2] for x in vector]) / len(vector)
-		#Calculo el desvio estandar de la muestra
-		sumatoria=0
-		for x in range(0,len(vector)):
-		    sumatoria += ((vector[x][2]-promedio)**2)
-		desvioEstandar= math.sqrt((sumatoria/(len(vector)-1)))
-
-		#calculo el desvio estandar absoluto de cada valor
-		for x in range(0,len(vector)):
-			vector[x]=(vector[x][0],vector[x][1],vector[x][2],abs(vector[x][2]-promedio))
-		#Ahora buscamos el sospechoso
-		indiceSospechoso=0
-		for x in range(0,len(vector)):
-			
-			if vector[indiceSospechoso][3]<vector[x][3]:
-				indiceSospechoso=x
-		tau=calcularTau(vector) 
+		# Calculo la media de todas las distancias
+		media = reduce(lambda x, y: x + y, [ x[2] for x in vector ]) / len(vector)
 		
-		#Me fijo si el sospechoso es outlier
-		if vector[indiceSospechoso][3]>tau*desvioEstandar:
+		# Calculo el desvio estandar de la muestra
+		sumatoria = 0
+		for x in range(0, len(vector)):
+		    sumatoria += ((vector[x][2] - media)**2)
+		
+		desvioEstandar = math.sqrt((sumatoria/(len(vector)-1)))
+
+		# Calculo el desvio estandar absoluto de cada valor y lo agrego al cuarto elemento de la tupla
+		for x in range(0, len(vector)):
+			vector[x] = (vector[x][0], vector[x][1], vector[x][2], abs(vector[x][2] - media))
+		
+		# Ahora buscamos el sospechoso
+		indiceSospechoso = 0
+		for x in range(0, len(vector)):
+			
+			if vector[indiceSospechoso][3] < vector[x][3]:
+				indiceSospechoso = x
+		tau = calcularTau(vector) 
+		
+		# Me fijo si el sospechoso es outlier
+		if vector[indiceSospechoso][3] > tau*desvioEstandar:
 			outliers.append(vector[indiceSospechoso])
 			del(vector[indiceSospechoso])
 		else:
 			hayMasOutliers=False
 	return outliers
-
-
-
-
 
 
 # Aca empieza el main
@@ -261,7 +263,7 @@ while actualTTL < maximoTTL:
 					# recien recibida y TODAS las IP recibidas en el anterior TTL
 					# Nota: Esta bien conceptualmente? Que otra solucion podria haber?
 					for ipSaltoAnterior in respuestasRTT[actualTTL-1]:
-						guardarDistancia(ipSaltoAnterior[0], ultimaIP, ultimoRTT - ipSaltoAnterior[1])					
+						guardarDistancia(ipSaltoAnterior[0], ultimaIP, ultimoRTT - ipSaltoAnterior[1])
 
 				# Si ya llegamos al host destino nos guardamos la distancia total
 				# (distancia entre nuestra IP local y el host destino), por si la necesitamos para algo
@@ -334,16 +336,47 @@ for x in range(0, len(distancias)):
 # Calculamos la distancia al host promedio
 distanciaAlHostPromedio = average(distanciasAlHost)
 
+# Calculamos los outliers y los guardamos en una variable global
+findOutliers()
 
-print ""
-print "Vector distanciasAlHost:"
-print distanciasAlHost
+# Calculo la media de todas las distancias
+media = reduce(lambda x, y: x + y, [ x[2] for x in distancias ]) / len(distancias)
 
-print ""
-print "distancia al host promedio:"
-print distanciaAlHostPromedio
+# Calculo el desvio estandar de la muestra
+sumatoria = 0
+for x in range(0, len(distancias)):
+    sumatoria += ((distancias[x][2] - media)**2)
+desvioEstandar = math.sqrt((sumatoria/(len(distancias)-1)))
 
-#print("OUTLIERS:")
-#for x in range(0,iteraciones):
-#	print(findOutliers(x))
+# Imprimimos la tabla con toda la info
+print "|",
+print ("IP1").center(15),
+print "|",
+print ("IP2").center(15),
+print "|",
+print ("RTT (ms)").center(8),
+print "|",
+print ("Mediciones").center(10),
+print "|",
+print ("(x_i-media(X))/S").center(16),
+print "|",
+print ("Es Outlier?").center(10),
+print "|"
+
+print "+-----------------+-----------------+----------+------------+------------------+-------------+"
+
+for x in range(0, len(distancias)):
+	print "|",
+	print (distancias[x][0]).ljust(15),
+	print "|",
+	print (distancias[x][1]).ljust(15),
+	print "|",
+	print ("%.2f" %(distancias[x][2])).rjust(8),
+	print "|",
+	print ("%d" %(distancias[x][3])).rjust(10),
+	print "|",
+	print ("%.2f" %((distancias[x][2] - media)/desvioEstandar)).rjust(16),
+	print "|",
+	print ("X" if esOutlier(x) else "").center(11),
+	print "|"
 
