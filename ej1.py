@@ -324,9 +324,9 @@ while actualTTL < maximoTTL:
 
 # Si llegamos aca es porque ya llegamos al host destino y el mismo nos respondio unas 30 veces	
 if distanciasAlHost:	
-	print("Se ha llegado al host %s en %d hops" %(args.host, actualTTL))
+	print("Se ha llegado al host %s en %d hops" %(args.host, actualTTL-1))
 else:
-	print("No se ha podido llegar al host %s en %d hops" %(args.host, actualTTL))
+	print("No se ha podido llegar al host %s en %d hops" %(args.host, actualTTL-1))
 
 print("")
 
