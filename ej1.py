@@ -291,9 +291,6 @@ while actualTTL < maximoTTL:
 				# Si por algun milagro divino recibimos alguna respuesta Time Exceeded mas adelante, volvemos a setear minimoTimeExceededRequeridos en 30,
 				# porque significa que, esperando el suficiente tiempo, vamos a poder llegar a los 30 Time Exceeded iniciales que queriamos (o los que fueran por parametro)
 
-				print("cantidadTimeExceeded = %d" %(cantidadTimeExceeded))				
-				print("minimoTimeExceededRequeridos = %d" %(minimoTimeExceededRequeridos))				
-
 				minimoTimeExceededRequeridos -= 1
 
 				if (cantidadTimeExceeded >= minimoTimeExceededRequeridos):
